@@ -852,9 +852,11 @@ def process(args):
 
     with tempfile.TemporaryDirectory(prefix="mr_") as tmp:
         # ── Transcrição ──
+        # Só transcreve se precisar: legendas ON, ou corte inteligente (precisa dos segmentos)
+        precisa_transcrever = args.legendas or (args.duracao > 0)
         if args.transcript:
             segs = load_transcript(args.transcript)
-        elif src_audio:
+        elif src_audio and precisa_transcrever:
             wav = os.path.join(tmp, "a.wav")
             r = run(["ffmpeg", "-y", "-i", args.input, "-vn",
                      "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wav])
@@ -862,7 +864,10 @@ def process(args):
                 sys.exit(f"❌  Falha ao extrair áudio:\n{r.stderr[-400:]}")
             segs = transcribe(wav, args.whisper_model)
         else:
-            print("⚠️  Vídeo sem áudio e sem --transcript: legendas desativadas.")
+            if not precisa_transcrever:
+                print("ℹ️  Legendas desativadas e sem corte — pulando transcrição.")
+            else:
+                print("⚠️  Vídeo sem áudio: legendas desativadas.")
             segs = []
 
         # ── Seleção de trechos ──
