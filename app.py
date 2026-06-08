@@ -1,3 +1,18 @@
+# Monkey-patch para o bug do gradio_client 1.3.0:
+# "argument of type 'bool' is not iterable"
+try:
+    import gradio_client.utils as _gcu
+    _orig_get_type = _gcu.get_type
+
+    def _patched_get_type(schema):
+        if not isinstance(schema, dict):
+            return "Any"
+        return _orig_get_type(schema)
+
+    _gcu.get_type = _patched_get_type
+except Exception:
+    pass
+
 import gradio as gr
 import os, tempfile, shutil, traceback
 from pathlib import Path
@@ -67,5 +82,4 @@ demo = gr.Interface(
     allow_flagging="never",
 )
 
-# show_api=False evita o bug do schema booleano no gradio_client 1.3.0
-demo.launch(show_api=False)
+demo.launch()
