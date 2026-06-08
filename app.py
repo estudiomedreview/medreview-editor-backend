@@ -13,7 +13,6 @@ def process_video(video_file, nome, name_sub, tema, duracao, legendas):
     if not nome or not nome.strip():
         return None, "Preencha o nome"
 
-    # gr.File retorna string (path) em v4 e v5
     video_path = video_file if isinstance(video_file, str) else video_file.name
 
     THEMES = {"Produto": "produto", "Aprovação": "aprovacao", "Experiência": "experiencia"}
@@ -52,15 +51,15 @@ def process_video(video_file, nome, name_sub, tema, duracao, legendas):
 demo = gr.Interface(
     fn=process_video,
     inputs=[
-        gr.File(label="📹 Vídeo (.mp4)", file_types=[".mp4", ".mov", ".avi"]),
+        gr.File(label="📹 Vídeo (.mp4)", file_types=[".mp4", ".mov"]),
         gr.Textbox(label="Nome do aluno", placeholder="Ex: Igor Pires"),
         gr.Textbox(label="Subtítulo", value="Aluno Med-Review"),
         gr.Dropdown(["Produto","Aprovação","Experiência"], value="Experiência", label="Tema"),
         gr.Dropdown(["Completo","30s","60s","90s"], value="Completo", label="Duração"),
-        gr.Radio(["Sim","Não"], value="Sim", label="Legendas automáticas"),
+        gr.Radio(["Sim","Não"], value="Sim", label="Legendas"),
     ],
     outputs=[
-        gr.File(label="⬇️ Vídeo editado (.mp4)"),
+        gr.File(label="⬇️ Download .mp4"),
         gr.Textbox(label="Status"),
     ],
     title="🎬 MED-Review Video Editor",
@@ -68,4 +67,5 @@ demo = gr.Interface(
     allow_flagging="never",
 )
 
-demo.launch()
+# show_api=False evita o bug do schema booleano no gradio_client 1.3.0
+demo.launch(show_api=False)
