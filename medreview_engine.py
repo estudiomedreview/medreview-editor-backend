@@ -898,19 +898,21 @@ def process(args):
         # ── Seleção de trechos ──
         score_segs(segs)
         # Se o vídeo já é mais curto que o alvo (com 5s de tolerância), mantém na íntegra
+        needs_cut = False
         if args.duracao > 0 and dur <= args.duracao + 5:
             print(f"⏱️  Vídeo de {dur:.1f}s já é mais curto que o alvo ({args.duracao}s) — usando completo")
             sel = segs
         elif args.duracao > 0 and segs:
             sel = select_excerpts(segs, args.duracao)
             print(f"✂️  {len(sel)}/{len(segs)} segmentos selecionados (~{args.duracao}s)")
+            needs_cut = True
         else:
             sel = segs
 
         # ── Corte real do vídeo (re-sincroniza tudo) ──
         working, sel, eff_dur, was_cut = (
             maybe_cut_source(args.input, sel, dur, tmp, source_has_audio=src_audio)
-            if (args.duracao > 0 and segs) else (args.input, sel, dur, False)
+            if (needs_cut and segs) else (args.input, sel, dur, False)
         )
         if was_cut:
             print(f"   Vídeo cortado: {eff_dur:.1f}s")
