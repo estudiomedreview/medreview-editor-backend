@@ -523,6 +523,13 @@ def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
     block_busy_masked[int(rows * 0.72):, :] = BIG
     block_busy_masked[:max(1, int(rows * 0.03)), :] = BIG
 
+    # Bias forte pro topo: penalizar regiões abaixo de 25% da altura
+    # (evita nome no meio do rosto em selfies)
+    for i in range(rows):
+        frac = i / max(rows - 1, 1)
+        if frac > 0.25:
+            block_busy_masked[i, :] += BIG * 0.5
+
     # Sliding window: acha região com MENOR soma de busyness
     best_score = BIG
     best_ij = (max(1, int(rows * 0.05)), max(1, int(cols * 0.05)))
