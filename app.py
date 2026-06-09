@@ -86,7 +86,14 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
         ]} for s in segs]
         segs_json = json.dumps(segs_data, ensure_ascii=False)
 
-        return transcript_text, f"✅ Transcrição concluída — revise e corrija o texto abaixo, depois clique em Renderizar.\n\nSegmentos JSON (não edite): {segs_json}"
+        # Save segments JSON to temp file keyed by a hash of the video path
+        import hashlib, base64
+        vid_key = hashlib.md5(video_path.encode()).hexdigest()[:12]
+        segs_cache = f"/tmp/segs_{vid_key}.json"
+        with open(segs_cache, "w", encoding="utf-8") as sf:
+            sf.write(segs_json)
+
+        return transcript_text, f"✅ Transcrição concluída! Revise o texto e clique em Renderizar."
 
     except Exception:
         return "", f"❌ Erro na transcrição:\n{traceback.format_exc()}"
@@ -127,24 +134,40 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
     a.legendas      = (legendas == "Sim")
 
     try:
-        # Se há transcrição editada, salva como arquivo JSON temporário
+        # Usa a transcrição editada pelo usuário (com timestamps aproximados)
         transcript_file = None
         if a.legendas and transcript_text and transcript_text.strip():
-            # Reconstrói segmentos a partir do texto editado (sem timestamps → aprox.)
-            lines = [l.strip() for l in transcript_text.strip().split("\n") if l.strip()]
-            # Tenta extrair duração total pro cálculo de timestamps aproximados
-            info = engine.probe(video_path)
-            total_dur = engine.get_dur(info)
-            seg_dur = total_dur / max(len(lines), 1)
-            segs_data = [
-                {
-                    "text": line,
-                    "start": round(i * seg_dur, 2),
-                    "end": round((i + 1) * seg_dur, 2),
-                    "words": []
-                }
-                for i, line in enumerate(lines)
-            ]
+            import hashlib
+            vid_key = hashlib.md5(video_path.encode()).hexdigest()[:12]
+            segs_cache = f"/tmp/segs_{vid_key}.json"
+
+            # Tenta usar os segmentos cacheados do step1 pra preservar timestamps
+            cached_segs = []
+            if os.path.exists(segs_cache):
+                try:
+                    with open(segs_cache) as sf:
+                        cached_segs = json.load(sf)
+                except Exception:
+                    cached_segs = []
+
+            # Mapeia o texto editado de volta pros segmentos (mantém timestamps)
+            edited_lines = [l.strip() for l in transcript_text.strip().split("\n") if l.strip()]
+            if cached_segs and len(cached_segs) == len(edited_lines):
+                # Mesmo número de linhas: preserva timestamps originais
+                for seg, new_text in zip(cached_segs, edited_lines):
+                    seg["text"] = new_text
+                segs_data = cached_segs
+            else:
+                # Linha count mudou: distribui uniformemente
+                info = engine.probe(video_path)
+                total_dur = engine.get_dur(info)
+                seg_dur = total_dur / max(len(edited_lines), 1)
+                segs_data = [
+                    {"text": line, "start": round(i * seg_dur, 2),
+                     "end": round((i + 1) * seg_dur, 2), "words": []}
+                    for i, line in enumerate(edited_lines)
+                ]
+
             tmp_json = tempfile.NamedTemporaryFile(mode="w", suffix=".json",
                                                    delete=False, encoding="utf-8")
             json.dump({"segments": segs_data}, tmp_json, ensure_ascii=False)
