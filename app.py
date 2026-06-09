@@ -154,6 +154,7 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
     a.legendas      = (legendas == "Sim")
 
     try:
+        import tempfile  # necessário para NamedTemporaryFile (escopo local)
         # Usa a transcrição editada pelo usuário (com timestamps aproximados)
         transcript_file = None
         if a.legendas and transcript_text and transcript_text.strip():
@@ -200,7 +201,6 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
         suffix = f"_{a.duracao}s" if a.duracao > 0 else ""
 
         # Usa arquivo temporário gerenciado pelo sistema (Gradio serve /tmp)
-        import tempfile
         out_tmp = tempfile.NamedTemporaryFile(
             delete=False, suffix=".mp4",
             dir="/tmp",
