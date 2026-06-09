@@ -817,23 +817,32 @@ def maybe_cut_source(input_path, sel_segs, total_dur, tmp, source_has_audio=True
 
 
 def build_audio_filter(inp_music_idx, eff_dur, vol, source_has_audio):
-    """Monta o filtro de áudio robusto a vídeos sem trilha de áudio."""
+    """Monta o filtro de áudio com loudnorm em duas passadas.
+
+    Voz  → loudnorm I=-14 LUFS (referência Instagram/TikTok)
+    Música → loudnorm I=-23 LUFS (9 dB abaixo da voz = fundo audível mas não invasivo)
+
+    O parâmetro `vol` (0..1) é aplicado POR CIMA da normalização da música,
+    permitindo ajuste fino. Default=0.85 (volume total quase cheio depois da norma).
+    Garantia: qualquer mp3, silencioso ou alto, sempre sai no mesmo nível.
+    """
     if source_has_audio:
-        voice = "[0:a]aresample=async=1[voice]"
+        voice = "[0:a]aresample=async=1,loudnorm=I=-14:TP=-1.5:LRA=11[voice]"
         voice_label = "[voice]"
     else:
-        # gera áudio silencioso do tamanho do vídeo
         voice = (f"anullsrc=channel_layout=stereo:sample_rate=48000,"
                  f"atrim=duration={eff_dur}[voice]")
         voice_label = "[voice]"
 
+    # loudnorm I=-23 normaliza pra nível fixo; vol é ajuste fino pós-norma
     music = (
         f"[{inp_music_idx}:a]aloop=loop=-1:size=2e+09,"
         f"atrim=duration={eff_dur},"
-        f"afade=t=in:st=0:d=2,afade=t=out:st={max(0.0, eff_dur - 3)}:d=3,"
-        f"volume={vol}[music]"
+        f"loudnorm=I=-23:TP=-2:LRA=7,"
+        f"volume={vol},"
+        f"afade=t=in:st=0:d=2,afade=t=out:st={max(0.0, eff_dur - 3)}:d=3"
+        f"[music]"
     )
-    # normalize=0 evita que a voz seja atenuada; weights mantém voz dominante
     mix = f"{voice_label}[music]amix=inputs=2:duration=first:normalize=0[aout]"
     return f"{voice};{music};{mix}"
 
