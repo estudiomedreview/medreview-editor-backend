@@ -110,7 +110,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
 
 
 # ── ETAPA 2: Renderização ───────────────────────────────────
-def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transcript_text):
+def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica, transcript_text):
     """Renderiza o vídeo com o transcript editado pelo usuário."""
     if not video_file:
         return None, "❌ Selecione um vídeo."
@@ -145,7 +145,17 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
     a.tema          = THEMES.get(tema, "experiencia")
     a.duracao       = DURACOES.get(duracao, 0)
     a.logo          = _get_path("logo.png")
-    a.musica        = _get_path("music.mp3")
+    # Trilha: OFF → sem música; ON → trilha aleatória da pasta music/
+    if musica == "Sim":
+        import glob, random
+        music_dir = os.path.join(BASE_DIR, "music")
+        tracks = glob.glob(os.path.join(music_dir, "*.mp3"))
+        if not tracks:
+            # fallback: music.mp3 na raiz (compatibilidade)
+            tracks = [p for p in [_get_path("music.mp3")] if p]
+        a.musica = random.choice(tracks) if tracks else None
+    else:
+        a.musica = None
     a.volume        = 85
     a.frame_top     = None
     a.frame_bottom  = "Você é o próximo"
@@ -237,6 +247,7 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
             tema_input   = gr.Dropdown(["Produto","Aprovação","Experiência"], value="Experiência", label="Tema")
             dur_input    = gr.Dropdown(["Completo","30s","60s","90s"], value="Completo", label="Duração")
             leg_input    = gr.Radio(["Sim","Não"], value="Sim", label="Gerar legendas")
+            mus_input    = gr.Radio(["Sim","Não"], value="Sim", label="Trilha musical")
 
             btn_transcribe = gr.Button("🎙️ Etapa 1 — Transcrever", variant="secondary")
             btn_render     = gr.Button("🚀 Etapa 2 — Renderizar", variant="primary")
@@ -259,7 +270,7 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
 
     btn_render.click(
         fn=step2_renderizar,
-        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, transcript_box],
+        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, mus_input, transcript_box],
         outputs=[video_out, status_box],
         api_name="renderizar",
     )
