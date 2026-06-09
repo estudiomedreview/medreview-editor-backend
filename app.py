@@ -1,10 +1,6 @@
 # ============================================================
-#  MED-Review Video Editor — Hugging Face Space (Gradio)
-# ============================================================
-#  CORREÇÃO CRÍTICA: o gradio_client tem um bug
-#  ("argument of type 'bool' is not iterable") que quebra
-#  o /info endpoint e causa "Error: No API found".
-#  Patcheamos AS DUAS funções afetadas ANTES de importar gradio.
+#  Monkey-patch: bug "argument of type 'bool' is not iterable"
+#  no gradio_client (afeta versões 1.3.x e 1.5.x)
 # ============================================================
 import gradio_client.utils as _gcu
 
@@ -31,33 +27,89 @@ import os
 import tempfile
 import shutil
 import traceback
+import json
 from pathlib import Path
 
-THEMES = {"Produto": "produto", "Aprovação": "aprovacao", "Experiência": "experiencia"}
+THEMES  = {"Produto": "produto", "Aprovação": "aprovacao", "Experiência": "experiencia"}
 DURACOES = {"Completo": 0, "30s": 30, "60s": 60, "90s": 90}
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def process_video(video_file, nome, name_sub, tema, duracao, legendas):
-    # Validações
+
+def _get_path(filename):
+    """Retorna path absoluto de arquivo no mesmo dir do app.py."""
+    p = os.path.join(BASE_DIR, filename)
+    return p if os.path.exists(p) else None
+
+
+# ── ETAPA 1: Transcrição ────────────────────────────────────
+def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
+    """Transcreve o vídeo e retorna o texto editável."""
+    if not video_file:
+        return "", "❌ Selecione um vídeo."
+    if not nome or not nome.strip():
+        return "", "❌ Preencha o nome do aluno."
+
+    video_path = video_file if isinstance(video_file, str) else getattr(video_file, "name", None)
+    if not video_path or not os.path.exists(video_path):
+        return "", "❌ Arquivo de vídeo inválido."
+
+    if legendas != "Sim":
+        return "", "ℹ️ Legendas desativadas — clique em Renderizar diretamente."
+
+    try:
+        import medreview_engine as engine
+    except Exception:
+        return "", f"❌ Erro ao carregar engine:\n{traceback.format_exc()}"
+
+    try:
+        # Extrai WAV e roda Whisper
+        with tempfile.TemporaryDirectory() as tmp:
+            wav = os.path.join(tmp, "a.wav")
+            r = engine.run(["ffmpeg", "-y", "-i", video_path, "-vn",
+                            "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", wav])
+            if r.returncode != 0:
+                return "", f"❌ Erro ao extrair áudio:\n{r.stderr[-300:]}"
+
+            segs = engine.transcribe(wav, "small")
+
+        # Formata como texto editável, um parágrafo por segmento
+        lines = []
+        for s in segs:
+            lines.append(s.text.strip())
+        transcript_text = "\n".join(lines)
+
+        # Salva JSON de segmentos pra usar na renderização
+        segs_data = [{"text": s.text, "start": s.start, "end": s.end, "words": [
+            {"word": w.word, "start": w.start, "end": w.end}
+            for w in (s.words or [])
+        ]} for s in segs]
+        segs_json = json.dumps(segs_data, ensure_ascii=False)
+
+        return transcript_text, f"✅ Transcrição concluída — revise e corrija o texto abaixo, depois clique em Renderizar.\n\nSegmentos JSON (não edite): {segs_json}"
+
+    except Exception:
+        return "", f"❌ Erro na transcrição:\n{traceback.format_exc()}"
+
+
+# ── ETAPA 2: Renderização ───────────────────────────────────
+def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transcript_text):
+    """Renderiza o vídeo com o transcript editado pelo usuário."""
     if not video_file:
         return None, "❌ Selecione um vídeo."
     if not nome or not nome.strip():
         return None, "❌ Preencha o nome do aluno."
 
-    # gr.File pode retornar str (path) ou objeto com .name
     video_path = video_file if isinstance(video_file, str) else getattr(video_file, "name", None)
     if not video_path or not os.path.exists(video_path):
-        return None, "❌ Não consegui ler o arquivo de vídeo."
+        return None, "❌ Arquivo de vídeo inválido."
 
-    # Importa o motor (lazy, pra capturar erro de import com traceback)
     try:
         import medreview_engine as engine
     except Exception:
-        return None, f"❌ Erro ao carregar o motor:\n{traceback.format_exc()}"
+        return None, f"❌ Erro ao carregar engine:\n{traceback.format_exc()}"
 
-    class Args:
-        pass
-
+    class Args: pass
     a = Args()
     a.input         = video_path
     a.nome          = nome.strip()
@@ -65,53 +117,99 @@ def process_video(video_file, nome, name_sub, tema, duracao, legendas):
     a.faculdade     = ""
     a.tema          = THEMES.get(tema, "experiencia")
     a.duracao       = DURACOES.get(duracao, 0)
-    a.logo          = "logo.png" if os.path.exists("logo.png") else None
-    a.musica        = "music.mp3" if os.path.exists("music.mp3") else None
-    a.volume        = 12
+    a.logo          = _get_path("logo.png")
+    a.musica        = _get_path("music.mp3")
+    a.volume        = 85
     a.frame_top     = None
     a.frame_bottom  = "Você é o próximo"
     a.frame_words   = ""
-    a.transcript    = None
     a.whisper_model = "small"
     a.legendas      = (legendas == "Sim")
 
     try:
+        # Se há transcrição editada, salva como arquivo JSON temporário
+        transcript_file = None
+        if a.legendas and transcript_text and transcript_text.strip():
+            # Reconstrói segmentos a partir do texto editado (sem timestamps → aprox.)
+            lines = [l.strip() for l in transcript_text.strip().split("\n") if l.strip()]
+            # Tenta extrair duração total pro cálculo de timestamps aproximados
+            info = engine.probe(video_path)
+            total_dur = engine.get_dur(info)
+            seg_dur = total_dur / max(len(lines), 1)
+            segs_data = [
+                {
+                    "text": line,
+                    "start": round(i * seg_dur, 2),
+                    "end": round((i + 1) * seg_dur, 2),
+                    "words": []
+                }
+                for i, line in enumerate(lines)
+            ]
+            tmp_json = tempfile.NamedTemporaryFile(mode="w", suffix=".json",
+                                                   delete=False, encoding="utf-8")
+            json.dump({"segments": segs_data}, tmp_json, ensure_ascii=False)
+            tmp_json.close()
+            transcript_file = tmp_json.name
+
+        a.transcript = transcript_file
+
         stem   = Path(video_path).stem
         suffix = f"_{a.duracao}s" if a.duracao > 0 else ""
-        # Diretório de saída persistente (Gradio precisa servir o arquivo)
         out_dir = "/tmp/medreview_out"
         os.makedirs(out_dir, exist_ok=True)
         a.output = os.path.join(out_dir, f"{stem}_medreview{suffix}.mp4")
 
         engine.process(a)
 
+        if transcript_file and os.path.exists(transcript_file):
+            os.unlink(transcript_file)
+
         if not os.path.exists(a.output):
-            return None, "❌ O processamento terminou mas não gerou arquivo."
+            return None, "❌ Processamento terminou mas não gerou arquivo."
 
         sz = os.path.getsize(a.output) / 1024 / 1024
         return a.output, f"✅ Pronto! ({sz:.1f} MB)"
+
     except Exception:
-        return None, f"❌ Erro no processamento:\n{traceback.format_exc()}"
+        return None, f"❌ Erro:\n{traceback.format_exc()}"
 
 
-demo = gr.Interface(
-    fn=process_video,
-    inputs=[
-        gr.File(label="📹 Vídeo do depoimento", file_types=[".mp4", ".mov", ".avi", ".mkv"]),
-        gr.Textbox(label="Nome do aluno", placeholder="Ex: Igor Pires"),
-        gr.Textbox(label="Subtítulo", value="Aluno Med-Review", placeholder="Ex: Aprovada em Dermato"),
-        gr.Dropdown(["Produto", "Aprovação", "Experiência"], value="Experiência", label="Tema"),
-        gr.Dropdown(["Completo", "30s", "60s", "90s"], value="Completo", label="Duração"),
-        gr.Radio(["Sim", "Não"], value="Sim", label="Gerar legendas automáticas"),
-    ],
-    outputs=[
-        gr.File(label="⬇️ Vídeo editado (.mp4)"),
-        gr.Textbox(label="Status", lines=3),
-    ],
-    title="🎬 MED-Review Video Editor",
-    description="Transcreve, legenda e edita depoimentos automaticamente. O processamento leva 1-3 min.",
-    flagging_mode="never",
-)
+# ── Interface ────────────────────────────────────────────────
+with gr.Blocks(title="MED-Review Video Editor") as demo:
+    gr.Markdown("# 🎬 MED-Review Video Editor")
+    gr.Markdown("**Etapa 1:** Preencha os campos e clique em *Transcrever* · **Etapa 2:** Revise o texto e clique em *Renderizar*")
 
-if __name__ == "__main__":
-    demo.launch()
+    with gr.Row():
+        with gr.Column(scale=1):
+            video_input  = gr.File(label="📹 Vídeo do depoimento", file_types=[".mp4", ".mov", ".avi"])
+            nome_input   = gr.Textbox(label="Nome do aluno", placeholder="Ex: Igor Pires")
+            sub_input    = gr.Textbox(label="Subtítulo", value="Aluno Med-Review")
+            tema_input   = gr.Dropdown(["Produto","Aprovação","Experiência"], value="Experiência", label="Tema")
+            dur_input    = gr.Dropdown(["Completo","30s","60s","90s"], value="Completo", label="Duração")
+            leg_input    = gr.Radio(["Sim","Não"], value="Sim", label="Gerar legendas")
+
+            btn_transcribe = gr.Button("🎙️ Etapa 1 — Transcrever", variant="secondary")
+            btn_render     = gr.Button("🚀 Etapa 2 — Renderizar", variant="primary")
+
+        with gr.Column(scale=1):
+            transcript_box = gr.Textbox(
+                label="📝 Transcrição (edite antes de renderizar)",
+                lines=12,
+                placeholder="A transcrição aparece aqui após a Etapa 1.\nVocê pode corrigir nomes, termos médicos, etc.",
+            )
+            status_box  = gr.Textbox(label="Status", lines=3, interactive=False)
+            video_out   = gr.File(label="⬇️ Vídeo editado (.mp4)")
+
+    btn_transcribe.click(
+        fn=step1_transcrever,
+        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input],
+        outputs=[transcript_box, status_box],
+    )
+
+    btn_render.click(
+        fn=step2_renderizar,
+        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, transcript_box],
+        outputs=[video_out, status_box],
+    )
+
+demo.launch()
