@@ -72,7 +72,7 @@ def process_video(video_file, nome, name_sub, tema, duracao, legendas):
     a.frame_bottom  = "Você é o próximo"
     a.frame_words   = ""
     a.transcript    = None
-    a.whisper_model = "base"
+    a.whisper_model = "small"
     a.legendas      = (legendas == "Sim")
 
     try:

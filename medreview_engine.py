@@ -532,11 +532,15 @@ def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
     x = int(best_ij[1] * cell * w / sw)
     y = int(best_ij[0] * cell * h / sh)
 
-    # Margens de segurança
-    x = max(int(w * 0.04), min(x, w - text_w - int(w * 0.04)))
+    # Margens de segurança — usa a largura MÁXIMA entre nome e subtítulo
+    # (o sub pode ser muito mais largo que o nome curto)
+    fs_sub_est = int(h * 0.020)
+    sub_w_est = int(len(name_sub) * fs_sub_est * 0.62)
+    max_block_w = max(text_w, sub_w_est) + int(w * 0.04)  # +margem interna
+    x = max(int(w * 0.04), min(x, w - max_block_w - int(w * 0.04)))
     y = max(int(h * 0.05), min(y, int(h * 0.72) - text_h))
 
-    return (x, y, text_w, text_h)
+    return (x, y, max_block_w, text_h)
 
 
 def create_name_banner(w, h, nome, sub, output, position):
