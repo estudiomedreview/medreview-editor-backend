@@ -149,7 +149,7 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
     if musica == "Sim":
         import glob, random
         music_dir = os.path.join(BASE_DIR, "music")
-        tracks = glob.glob(os.path.join(music_dir, "*.mp3"))
+        tracks = glob.glob(os.path.join(music_dir, "*.mp3")) + glob.glob(os.path.join(music_dir, "*.wav"))
         if not tracks:
             # fallback: music.mp3 na raiz (compatibilidade)
             tracks = [p for p in [_get_path("music.mp3")] if p]
