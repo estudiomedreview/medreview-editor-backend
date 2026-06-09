@@ -178,9 +178,16 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
 
         stem   = Path(video_path).stem
         suffix = f"_{a.duracao}s" if a.duracao > 0 else ""
-        out_dir = "/tmp/medreview_out"
-        os.makedirs(out_dir, exist_ok=True)
-        a.output = os.path.join(out_dir, f"{stem}_medreview{suffix}.mp4")
+
+        # Usa arquivo temporário gerenciado pelo sistema (Gradio serve /tmp)
+        import tempfile
+        out_tmp = tempfile.NamedTemporaryFile(
+            delete=False, suffix=".mp4",
+            dir="/tmp",
+            prefix=f"{stem}_medreview{suffix}_"
+        )
+        out_tmp.close()
+        a.output = out_tmp.name
 
         engine.process(a)
 
@@ -237,5 +244,5 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
         api_name="renderizar",
     )
 
-demo.queue(max_size=10)  # fila pra processar requisições sequenciais
-demo.launch(show_api=True)
+demo.queue(max_size=10)
+demo.launch(show_api=True, allowed_paths=["/tmp"])
