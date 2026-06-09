@@ -50,9 +50,19 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
     if not nome or not nome.strip():
         return "", "❌ Preencha o nome do aluno."
 
-    video_path = video_file if isinstance(video_file, str) else getattr(video_file, "name", None)
-    if not video_path or not os.path.exists(video_path):
-        return "", "❌ Arquivo de vídeo inválido."
+    # Gradio 5 passes FileData object OR string path — handle both
+    if isinstance(video_file, str):
+        video_path = video_file
+    elif hasattr(video_file, "path"):
+        video_path = video_file.path       # Gradio 5 FileData object
+    elif hasattr(video_file, "name"):
+        video_path = video_file.name       # Gradio 4 style
+    elif isinstance(video_file, dict):
+        video_path = video_file.get("path") or video_file.get("name")
+    else:
+        video_path = str(video_file) if video_file else None
+    if not video_path or not os.path.exists(str(video_path)):
+        return "", f"❌ Arquivo de vídeo inválido: {repr(video_file)}"
 
     if legendas != "Sim":
         return "", "ℹ️ Legendas desativadas — clique em Renderizar diretamente."
@@ -107,9 +117,19 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, transc
     if not nome or not nome.strip():
         return None, "❌ Preencha o nome do aluno."
 
-    video_path = video_file if isinstance(video_file, str) else getattr(video_file, "name", None)
-    if not video_path or not os.path.exists(video_path):
-        return None, "❌ Arquivo de vídeo inválido."
+    # Gradio 5 passes FileData object OR string path — handle both
+    if isinstance(video_file, str):
+        video_path = video_file
+    elif hasattr(video_file, "path"):
+        video_path = video_file.path
+    elif hasattr(video_file, "name"):
+        video_path = video_file.name
+    elif isinstance(video_file, dict):
+        video_path = video_file.get("path") or video_file.get("name")
+    else:
+        video_path = str(video_file) if video_file else None
+    if not video_path or not os.path.exists(str(video_path)):
+        return None, f"❌ Arquivo de vídeo inválido: {repr(video_file)}"
 
     try:
         import medreview_engine as engine
