@@ -87,7 +87,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
         segs_json = json.dumps(segs_data, ensure_ascii=False)
 
         # Save segments JSON to temp file keyed by a hash of the video path
-        import hashlib, base64
+        import hashlib
         vid_key = hashlib.md5(video_path.encode()).hexdigest()[:12]
         segs_cache = f"/tmp/segs_{vid_key}.json"
         with open(segs_cache, "w", encoding="utf-8") as sf:
@@ -227,12 +227,15 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
         fn=step1_transcrever,
         inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input],
         outputs=[transcript_box, status_box],
+        api_name="transcrever",
     )
 
     btn_render.click(
         fn=step2_renderizar,
         inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, transcript_box],
         outputs=[video_out, status_box],
+        api_name="renderizar",
     )
 
-demo.launch()
+demo.queue(max_size=10)  # fila pra processar requisições sequenciais
+demo.launch(show_api=True)

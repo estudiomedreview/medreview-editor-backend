@@ -236,13 +236,18 @@ def remove_black_bg(logo):
 
 # ═══ 1. TRANSCRIPTION ═══════════════════════════════════════════════════════
 
+_WHISPER_CACHE = {}
+
 def transcribe(audio, model_size="base"):
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         sys.exit("❌  faster-whisper não encontrado. Instale: pip install faster-whisper")
-    print("🎙️  Carregando modelo Whisper...")
-    m = WhisperModel(model_size, device="cpu", compute_type="int8")
+    # Cache do modelo: evita recarregar a cada chamada (importante no servidor)
+    if model_size not in _WHISPER_CACHE:
+        print(f"🎙️  Carregando modelo Whisper ({model_size})...")
+        _WHISPER_CACHE[model_size] = WhisperModel(model_size, device="cpu", compute_type="int8")
+    m = _WHISPER_CACHE[model_size]
     print("🎙️  Transcrevendo...")
     raw, info = m.transcribe(audio, language="pt", beam_size=5,
                              word_timestamps=True, vad_filter=True)
