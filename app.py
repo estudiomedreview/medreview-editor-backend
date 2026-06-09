@@ -81,7 +81,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
 
         # Salva JSON de segmentos pra usar na renderização
         segs_data = [{"text": s.text, "start": s.start, "end": s.end, "words": [
-            {"word": w.word, "start": w.start, "end": w.end}
+            {"word": w.text, "start": w.start, "end": w.end}
             for w in (s.words or [])
         ]} for s in segs]
         segs_json = json.dumps(segs_data, ensure_ascii=False)
