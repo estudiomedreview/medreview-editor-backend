@@ -564,6 +564,15 @@ def _get_brand_font(size):
     return get_font(True, size)
 
 
+def _get_sub_font(size):
+    """Tenta Orbitron-Bold (bundled), fallback pra _get_brand_font."""
+    sub_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Orbitron-Bold.ttf")
+    if os.path.exists(sub_path):
+        try: return ImageFont.truetype(sub_path, size)
+        except OSError: pass
+    return _get_brand_font(size)
+
+
 def create_name_banner(w, h, nome, sub, output, position):
     """Banner estilo MED-Review: parallelogramos escalonados (salmon + brown).
     position = (x, y, text_w, text_h)"""
@@ -581,7 +590,7 @@ def create_name_banner(w, h, nome, sub, output, position):
     fs_name = int(h * 0.030)
     fs_sub = int(h * 0.016)
     font_name = _get_brand_font(fs_name)
-    font_sub = _get_brand_font(fs_sub)
+    font_sub = _get_sub_font(fs_sub)
 
     pad_x = int(w * 0.018)
     pad_y = int(h * 0.006)
