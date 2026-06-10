@@ -549,7 +549,8 @@ def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
     fs_sub_est = int(h * 0.020)
     sub_w_est = int(len(name_sub) * fs_sub_est * 0.62)
     max_block_w = max(text_w, sub_w_est) + int(w * 0.04)  # +margem interna
-    x = max(int(w * 0.04), min(x, w - max_block_w - int(w * 0.04)))
+    # Alinhado à esquerda (margem fixa)
+    x = int(w * 0.04)
     y = max(int(h * 0.05), min(y, int(h * 0.72) - text_h))
 
     return (x, y, max_block_w, text_h)
@@ -871,7 +872,7 @@ def build_audio_filter(inp_music_idx, eff_dur, vol, source_has_audio):
     Garantia: qualquer mp3, silencioso ou alto, sempre sai no mesmo nível.
     """
     if source_has_audio:
-        voice = "[0:a]aresample=async=1,loudnorm=I=-14:TP=-1.5:LRA=11[voice]"
+        voice = "[0:a]aresample=async=1,loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=in:st=0:d=0.3[voice]"
         voice_label = "[voice]"
     else:
         voice = (f"anullsrc=channel_layout=stereo:sample_rate=48000,"
