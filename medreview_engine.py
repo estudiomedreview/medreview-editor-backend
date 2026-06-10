@@ -872,7 +872,17 @@ def build_audio_filter(inp_music_idx, eff_dur, vol, source_has_audio):
     Garantia: qualquer mp3, silencioso ou alto, sempre sai no mesmo nível.
     """
     if source_has_audio:
-        voice = "[0:a]aresample=async=1,loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=in:st=0:d=0.3[voice]"
+        # Filtros de voz: highpass (remove rumble), afftdn (redução de ruído leve),
+        # loudnorm, fade-in suave
+        voice = (
+            "[0:a]aresample=async=1,"
+            "highpass=f=80,"
+            "lowpass=f=13000,"
+            "afftdn=nf=-25,"
+            "loudnorm=I=-14:TP=-1.5:LRA=11,"
+            "afade=t=in:st=0:d=0.3"
+            "[voice]"
+        )
         voice_label = "[voice]"
     else:
         voice = (f"anullsrc=channel_layout=stereo:sample_rate=48000,"
