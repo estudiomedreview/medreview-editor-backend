@@ -555,50 +555,73 @@ def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
     return (x, y, max_block_w, text_h)
 
 
-def create_name_banner(w, h, nome, sub, output, position):
-    """Nome posicionado em região vazia do vídeo (passada como position).
-    Backdrop escuro radial suave + contorno preto pra legibilidade.
+def _get_brand_font(size):
+    """Tenta Exo2-Bold (bundled), fallback pra get_font(bold)."""
+    brand_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Exo2-Bold.otf")
+    if os.path.exists(brand_path):
+        try: return ImageFont.truetype(brand_path, size)
+        except OSError: pass
+    return get_font(True, size)
 
+
+def create_name_banner(w, h, nome, sub, output, position):
+    """Banner estilo MED-Review: parallelogramos escalonados (salmon + brown).
     position = (x, y, text_w, text_h)"""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    x, y, area_w, area_h = position
-
-    fs = int(h * 0.028)
-    fs_sub = int(h * 0.020)
-    fn = get_font(True, fs)
-    fsx = get_font(False, fs_sub)
-
-    # Backdrop escuro suave (radial falloff)
-    pad_x, pad_y = int(w * 0.025), int(h * 0.012)
-    bx0 = max(0, x - pad_x); by0 = max(0, y - pad_y)
-    bx1 = min(w, x + area_w + pad_x); by1 = min(h, y + area_h + pad_y)
-
-    if HAVE_NUMPY and bx1 > bx0 and by1 > by0:
-        arr = np.array(img)
-        rh = by1 - by0; rw = bx1 - bx0
-        cy = rh / 2.0; cx = rw / 2.0
-        yy = np.arange(rh)[:, None]
-        xx = np.arange(rw)[None, :]
-        dy_n = np.abs(yy - cy) / max(cy, 1)
-        dx_n = np.abs(xx - cx) / max(cx, 1)
-        d = np.maximum(dx_n, dy_n)
-        alpha = (135 * np.clip(1 - d, 0, 1) ** 1.6).astype(np.uint8)
-        arr[by0:by1, bx0:bx1, :3] = 0
-        arr[by0:by1, bx0:bx1, 3] = np.maximum(arr[by0:by1, bx0:bx1, 3], alpha)
-        img = Image.fromarray(arr, "RGBA")
-
     draw = ImageDraw.Draw(img)
-    name_y = y
-    sub_y = y + fs + int(h * 0.005)
+    base_x, base_y, _, _ = position
 
-    # Contorno preto leve para legibilidade em qualquer fundo
-    draw.text((x, name_y), nome,
-              fill=(255, 255, 255, 255), font=fn,
-              stroke_width=2, stroke_fill=(0, 0, 0, 200))
-    if sub:
-        draw.text((x, sub_y), sub,
-                  fill=(255, 255, 255, 220), font=fsx,
-                  stroke_width=2, stroke_fill=(0, 0, 0, 200))
+    # Colors
+    salmon = (222, 167, 143, 240)
+    brown = (112, 60, 39, 240)
+    black_text = (0, 0, 0, 255)
+    white_text = (255, 255, 255, 255)
+
+    # Font sizes proportional to output height
+    fs_name = int(h * 0.030)
+    fs_sub = int(h * 0.016)
+    font_name = _get_brand_font(fs_name)
+    font_sub = _get_brand_font(fs_sub)
+
+    pad_x = int(w * 0.018)
+    pad_y = int(h * 0.006)
+    skew = int(w * 0.008)  # parallelogram lean
+
+    # Measure text
+    name_bb = draw.textbbox((0, 0), nome.upper(), font=font_name)
+    sub_bb = draw.textbbox((0, 0), sub.upper(), font=font_sub)
+    name_tw = name_bb[2] - name_bb[0]
+    name_th = name_bb[3] - name_bb[1]
+    sub_tw = sub_bb[2] - sub_bb[0]
+    sub_th = sub_bb[3] - sub_bb[1]
+
+    # Subtitle bar (salmon, smaller, top-left)
+    sub_bar_w = sub_tw + pad_x * 2
+    sub_bar_h = sub_th + pad_y * 2
+    sx = base_x
+    sy = base_y
+    draw.polygon([
+        (sx + skew, sy),
+        (sx + sub_bar_w + skew, sy),
+        (sx + sub_bar_w, sy + sub_bar_h),
+        (sx, sy + sub_bar_h),
+    ], fill=salmon)
+    draw.text((sx + pad_x + skew // 2, sy + pad_y - sub_bb[1]),
+              sub.upper(), fill=black_text, font=font_sub)
+
+    # Name bar (brown, larger, offset down-right, slight overlap)
+    name_bar_w = name_tw + pad_x * 2
+    name_bar_h = name_th + pad_y * 2
+    nx = base_x + int(w * 0.010)
+    ny = sy + sub_bar_h - int(h * 0.003)
+    draw.polygon([
+        (nx + skew, ny),
+        (nx + name_bar_w + skew, ny),
+        (nx + name_bar_w, ny + name_bar_h),
+        (nx, ny + name_bar_h),
+    ], fill=brown)
+    draw.text((nx + pad_x + skew // 2, ny + pad_y - name_bb[1]),
+              nome.upper(), fill=white_text, font=font_name)
 
     img.save(output, "PNG")
     return output
