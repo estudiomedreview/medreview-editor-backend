@@ -390,7 +390,9 @@ def remap_to_cut_timeline(segs, groups):
 # ═══ 3. ASS SUBTITLES ═══════════════════════════════════════════════════════
 
 def make_chunks(segs, max_w=4, max_c=15):
-    """Gera chunks de legenda: máx 15 caracteres por linha, máx 2 linhas."""
+    """Gera chunks de legenda respeitando máx de caracteres e palavras.
+    Verifica ANTES de adicionar a palavra pra nunca estourar max_c
+    (garante que cada chunk caiba numa linha só)."""
     all_w = []
     for s in segs:
         if s.words:
@@ -404,16 +406,22 @@ def make_chunks(segs, max_w=4, max_c=15):
                                   round(s.start + (j + 1) * pw, 2)))
     if not all_w:
         return []
-    chunks, cur, st = [], [], all_w[0].start
+    chunks, cur, st, last_end = [], [], all_w[0].start, all_w[0].end
     for w in all_w:
+        word = w.text.strip()
+        if not word:
+            continue
+        tentative = (" ".join(cur + [word])).strip()
+        # Se adicionar a palavra estoura o limite E já tem conteúdo, fecha o chunk antes
+        if cur and (len(tentative) > max_c or len(cur) >= max_w):
+            chunks.append(SubChunk(" ".join(cur), st, last_end))
+            cur, st = [], w.start
         if not cur:
             st = w.start
-        cur.append(w.text)
-        if len(" ".join(cur)) >= max_c:
-            chunks.append(SubChunk(" ".join(cur), st, w.end))
-            cur = []
+        cur.append(word)
+        last_end = w.end
     if cur:
-        chunks.append(SubChunk(" ".join(cur), st, all_w[-1].end))
+        chunks.append(SubChunk(" ".join(cur), st, last_end))
     return chunks
 
 def write_ass(chunks, path, w=OUT_W, h=OUT_H, white=False):
@@ -499,10 +507,11 @@ def write_ass_popin(chunks, path, w=OUT_W, h=OUT_H, vertical="medreview"):
     )
     lines = [header]
     for c in chunks:
-        t = c.text.replace("{", "(").replace("}", ")").strip().upper()
+        # Remove quebras de linha e força UMA linha só (\q2 = no wrap)
+        t = c.text.replace("{", "(").replace("}", ")").replace("\\N", " ").replace("\n", " ")
+        t = " ".join(t.split()).strip().upper()
         # Pop-in: escala 60%→110%→100% nos primeiros 220ms (efeito bounce)
-        dur = max(0.0, c.end - c.start)
-        anim = ("{\\fscx60\\fscy60"
+        anim = ("{\\q2\\fscx60\\fscy60"
                 "\\t(0,120,\\fscx110\\fscy110)"
                 "\\t(120,220,\\fscx100\\fscy100)}")
         lines.append(f"Dialogue: 0,{ft(c.start)},{ft(c.end)},POP,,0,0,0,,{anim}{t}")
@@ -955,10 +964,17 @@ def process(args):
         working_has_audio = src_audio
 
         # ── Legendas (timestamps já no timeline final) ──
-        chunks = make_chunks(sel) if args.legendas else []
+        estilo = getattr(args, "legenda_estilo", "dinamica")
+        if args.legendas:
+            # Pop-in: chunks curtos (máx 12 chars) pra caber sempre em UMA linha
+            if estilo == "popin":
+                chunks = make_chunks(sel, max_w=3, max_c=12)
+            else:
+                chunks = make_chunks(sel)
+        else:
+            chunks = []
         ass = os.path.join(tmp, "s.ass")
         if chunks:
-            estilo = getattr(args, "legenda_estilo", "dinamica")
             if estilo == "popin":
                 write_ass_popin(chunks, ass, OUT_W, OUT_H,
                                 vertical=getattr(args, "vertical", "medreview"))
