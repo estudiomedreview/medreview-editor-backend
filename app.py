@@ -104,7 +104,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
         with open(segs_cache, "w", encoding="utf-8") as sf:
             sf.write(segs_json)
 
-        return transcript_text, f"✅ Transcrição concluída! Revise o texto e clique em Renderizar."
+        return transcript_text, f"✅ Transcrição concluída! Revise o texto e clique em Renderizar.|||{segs_json}"
 
     except Exception:
         return "", f"❌ Erro na transcrição:\n{traceback.format_exc()}"
