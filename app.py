@@ -111,7 +111,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
 
 
 # ── ETAPA 2: Renderização ───────────────────────────────────
-def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica, transcript_text):
+def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica, vertical, transcript_text):
     """Renderiza o vídeo com o transcript editado pelo usuário."""
     if not video_file:
         return None, "❌ Selecione um vídeo."
@@ -144,6 +144,9 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
     a.name_sub      = (name_sub or "Aluno Med-Review").strip()
     a.faculdade     = ""
     a.tema          = THEMES.get(tema, "experiencia")
+    VERTICAL_MAP = {"MED-Review": "medreview", "OFT-Review": "oft",
+                    "ANEST-Review": "anest", "ORTOP-Review": "ortop"}
+    a.vertical      = VERTICAL_MAP.get(vertical, "medreview")
     a.duracao       = DURACOES.get(duracao, 0)
     a.logo          = _get_path("logo.png")
     # Trilha: OFF → sem música; ON → trilha aleatória da pasta music/
@@ -246,6 +249,8 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
             video_input  = gr.File(label="📹 Vídeo do depoimento", file_types=[".mp4", ".mov", ".avi"])
             nome_input   = gr.Textbox(label="Nome do aluno", placeholder="Ex: Igor Pires")
             sub_input    = gr.Textbox(label="Subtítulo", value="Aluno Med-Review")
+            vert_input   = gr.Dropdown(["MED-Review","OFT-Review","ANEST-Review","ORTOP-Review"],
+                                       value="MED-Review", label="Vertical")
             tema_input   = gr.Dropdown(["Produto","Aprovação","Experiência"], value="Experiência", label="Tema")
             dur_input    = gr.Dropdown(["Completo","30s","60s","90s"], value="Completo", label="Duração")
             leg_input    = gr.Radio(["Sim","Não"], value="Sim", label="Gerar legendas")
@@ -272,7 +277,7 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
 
     btn_render.click(
         fn=step2_renderizar,
-        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, mus_input, transcript_box],
+        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, mus_input, vert_input, transcript_box],
         outputs=[video_out, status_box],
         api_name="renderizar",
     )

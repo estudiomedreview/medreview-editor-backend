@@ -70,6 +70,34 @@ THEMES = {
     "experiencia": {"label": "Experiência MED-Review",  "color": (139, 92, 246)},
 }
 
+# Paletas das verticais (banner de nome) — baseadas no brandbook MED-Review
+VERTICAIS = {
+    "medreview": {  # MED-Review (padrão)
+        "sub_bg":   (222, 167, 143),  # salmon #DEA78F
+        "name_bg":  (112, 60, 39),    # brown  #703C27
+        "sub_fg":   (0, 0, 0),        # texto subtítulo preto
+        "name_fg":  (255, 255, 255),  # texto nome branco
+    },
+    "oft": {  # OFT-Review — dourado claro (fundo claro → texto preto)
+        "sub_bg":   (219, 173, 107),  # #DBAD6B
+        "name_bg":  (248, 219, 125),  # #F8DB7D
+        "sub_fg":   (255, 255, 255),
+        "name_fg":  (0, 0, 0),
+    },
+    "anest": {  # ANEST-Review — azul
+        "sub_bg":   (0, 182, 241),    # #00B6F1
+        "name_bg":  (51, 102, 153),   # #336699
+        "sub_fg":   (0, 0, 0),
+        "name_fg":  (255, 255, 255),
+    },
+    "ortop": {  # ORTOP-Review — dourado/marrom
+        "sub_bg":   (204, 153, 51),   # #CC9933
+        "name_bg":  (102, 51, 0),     # #663300
+        "sub_fg":   (255, 255, 255),
+        "name_fg":  (255, 255, 255),
+    },
+}
+
 # Cores ASS em formato &HAABBGGRR (alpha-blue-green-red). AA=00 → opaco.
 ASS_YELLOW = "&H0000D7FF"   # #FFD700  (vertical, igual à referência dos vídeos)
 ASS_WHITE  = "&H00FFFFFF"   # #FFFFFF  (horizontal, igual à moldura purple)
@@ -574,16 +602,19 @@ def _get_sub_font(size):
 
 def create_name_banner(w, h, nome, sub, output, position):
     """Banner estilo MED-Review: parallelogramos escalonados (salmon + brown).
-    position = (x, y, text_w, text_h)"""
+def create_name_banner(w, h, nome, sub, output, position, vertical="medreview"):
+    """Banner estilo MED-Review: parallelogramos escalonados.
+    position = (x, y, text_w, text_h); vertical = medreview|oft|anest|ortop"""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     base_x, base_y, _, _ = position
 
-    # Colors
-    salmon = (222, 167, 143, 240)
-    brown = (112, 60, 39, 240)
-    black_text = (0, 0, 0, 255)
-    white_text = (255, 255, 255, 255)
+    # Paleta da vertical
+    pal = VERTICAIS.get(vertical, VERTICAIS["medreview"])
+    salmon = (*pal["sub_bg"], 240)
+    brown = (*pal["name_bg"], 240)
+    black_text = (*pal["sub_fg"], 255)
+    white_text = (*pal["name_fg"], 255)
 
     # Font sizes proportional to output height
     fs_name = int(h * 0.030)
@@ -992,7 +1023,8 @@ def process(args):
             banner_png = os.path.join(tmp, "banner.png")
             banner_pos = find_empty_region(working, eff_dur, OUT_W, OUT_H, args.nome, args.name_sub)
             print(f"   📍 Posição do nome: x={banner_pos[0]}, y={banner_pos[1]}")
-            create_name_banner(OUT_W, OUT_H, args.nome, args.name_sub, banner_png, banner_pos)
+            create_name_banner(OUT_W, OUT_H, args.nome, args.name_sub, banner_png, banner_pos,
+                                vertical=getattr(args, "vertical", "medreview"))
             # garante 9:16: escala+pad o vídeo de entrada
             base_v = (
                 f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
