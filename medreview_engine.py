@@ -532,109 +532,18 @@ def create_logo_overlay(w, h, logo_path, output):
     return output
 
 def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
-    """Analisa frames do vídeo pra achar a região mais vazia (menor variância
-    temporal + espacial) onde o nome NÃO vai cobrir o rosto/movimento da pessoa.
-
-    Retorna (x, y, text_w, text_h) — anchor top-left do bloco de texto.
-    Exclui automaticamente a zona inferior (legendas)."""
-    fs = int(h * 0.028)
-    fs_sub = int(h * 0.020)
+    """Posição do banner de nome: sempre alinhado à esquerda, topo do vídeo.
+    Retorna (x, y, max_block_w, text_h) — anchor top-left do bloco de texto.
+    (Versão simplificada: o banner do MED-Review fica fixo no topo-esquerda,
+    então não é mais necessário analisar frames pra achar região vazia.)"""
+    fs = int(h * 0.030)
+    fs_sub = int(h * 0.016)
     text_w = int(len(nome) * fs * 0.55)
     text_h = fs + fs_sub + int(h * 0.015)
-
-    # Fallback se numpy não disponível: topo-esquerda
-    if not HAVE_NUMPY:
-        return (int(w * 0.05), int(h * 0.10), text_w, text_h)
-
-    # Amostra 4 frames em baixa resolução pra análise rápida
-    sw = 240
-    sh = max(2, int(round(sw * h / w)))
-    if sh % 2: sh += 1
-    sample_times = [total_dur * t for t in (0.15, 0.4, 0.65, 0.85)]
-
-    frames = []
-    with tempfile.TemporaryDirectory(prefix="mr_emp_") as tmp:
-        for i, t in enumerate(sample_times):
-            out = os.path.join(tmp, f"f{i}.jpg")
-            r = run(["ffmpeg", "-y", "-ss", str(t), "-i", video_path,
-                     "-frames:v", "1", "-vf", f"scale={sw}:{sh}",
-                     "-q:v", "5", out])
-            if r.returncode == 0 and os.path.exists(out):
-                try:
-                    arr = np.array(Image.open(out).convert("L"), dtype=np.float32)
-                    if arr.shape == (sh, sw):
-                        frames.append(arr)
-                except Exception:
-                    pass
-
-    if len(frames) < 2:
-        return (int(w * 0.05), int(h * 0.10), text_w, text_h)
-
-    stacked = np.stack(frames)
-
-    # Mapa de "ocupação visual":
-    #   - variância temporal = movimento entre frames (rosto, mãos)
-    #   - variância espacial = bordas/detalhes (texturas, contornos)
-    temporal_var = stacked.var(axis=0)
-    avg = stacked.mean(axis=0)
-    gx = np.zeros_like(avg); gy = np.zeros_like(avg)
-    gx[:, 1:] = np.abs(np.diff(avg, axis=1))
-    gy[1:, :] = np.abs(np.diff(avg, axis=0))
-    spatial_var = gx + gy
-
-    busy = temporal_var + spatial_var * 0.3
-
-    # Média por bloco (cell de 12 px) → grid de busyness
-    cell = 12
-    rows = sh // cell
-    cols = sw // cell
-    if rows == 0 or cols == 0:
-        return (int(w * 0.05), int(h * 0.10), text_w, text_h)
-    trunc = busy[:rows * cell, :cols * cell]
-    block_busy = trunc.reshape(rows, cell, cols, cell).mean(axis=(1, 3))
-
-    # Tamanho do bloco de texto em cells
-    cells_w = max(3, min(cols, int(text_w * sw / w / cell) + 1))
-    cells_h = max(2, min(rows, int(text_h * sh / h / cell) + 1))
-
-    # Zonas proibidas:
-    #   - Bottom 28% (zona da legenda amarela)
-    #   - Top 3% (folga do logo se existir)
-    BIG = 1e9
-    block_busy_masked = block_busy.copy()
-    block_busy_masked[int(rows * 0.72):, :] = BIG
-    block_busy_masked[:max(1, int(rows * 0.03)), :] = BIG
-
-    # Bias forte pro topo: penalizar regiões abaixo de 25% da altura
-    # (evita nome no meio do rosto em selfies)
-    for i in range(rows):
-        frac = i / max(rows - 1, 1)
-        if frac > 0.25:
-            block_busy_masked[i, :] += BIG * 0.5
-
-    # Sliding window: acha região com MENOR soma de busyness
-    best_score = BIG
-    best_ij = (max(1, int(rows * 0.05)), max(1, int(cols * 0.05)))
-    for i in range(rows - cells_h + 1):
-        for j in range(cols - cells_w + 1):
-            score = block_busy_masked[i:i + cells_h, j:j + cells_w].sum()
-            if score < best_score:
-                best_score = score
-                best_ij = (i, j)
-
-    # Converte de volta pra resolução cheia
-    x = int(best_ij[1] * cell * w / sw)
-    y = int(best_ij[0] * cell * h / sh)
-
-    # Margens de segurança — usa a largura MÁXIMA entre nome e subtítulo
-    # (o sub pode ser muito mais largo que o nome curto)
-    fs_sub_est = int(h * 0.020)
-    sub_w_est = int(len(name_sub) * fs_sub_est * 0.62)
-    max_block_w = max(text_w, sub_w_est) + int(w * 0.04)  # +margem interna
-    # Alinhado à esquerda (margem fixa)
+    sub_w_est = int(len(name_sub) * fs_sub * 0.62)
+    max_block_w = max(text_w, sub_w_est) + int(w * 0.04)
     x = int(w * 0.04)
-    y = max(int(h * 0.05), min(y, int(h * 0.72) - text_h))
-
+    y = int(h * 0.05)
     return (x, y, max_block_w, text_h)
 
 
@@ -656,8 +565,6 @@ def _get_sub_font(size):
     return _get_brand_font(size)
 
 
-def create_name_banner(w, h, nome, sub, output, position):
-    """Banner estilo MED-Review: parallelogramos escalonados (salmon + brown).
 def create_name_banner(w, h, nome, sub, output, position, vertical="medreview"):
     """Banner estilo MED-Review: parallelogramos escalonados.
     position = (x, y, text_w, text_h); vertical = medreview|oft|anest|ortop"""
