@@ -361,7 +361,8 @@ def remap_to_cut_timeline(segs, groups):
 
 # ═══ 3. ASS SUBTITLES ═══════════════════════════════════════════════════════
 
-def make_chunks(segs, max_w=6, max_c=30):
+def make_chunks(segs, max_w=4, max_c=15):
+    """Gera chunks de legenda: máx 15 caracteres por linha, máx 2 linhas."""
     all_w = []
     for s in segs:
         if s.words:
@@ -380,7 +381,7 @@ def make_chunks(segs, max_w=6, max_c=30):
         if not cur:
             st = w.start
         cur.append(w.text)
-        if len(cur) >= max_w or len(" ".join(cur)) >= max_c:
+        if len(" ".join(cur)) >= max_c:
             chunks.append(SubChunk(" ".join(cur), st, w.end))
             cur = []
     if cur:
@@ -420,9 +421,6 @@ def write_ass(chunks, path, w=OUT_W, h=OUT_H, white=False):
     lines = [header]
     for c in chunks:
         t = c.text.replace("{", "(").replace("}", ")").strip()
-        if len(t) > 20:
-            ws = t.split(); mid = (len(ws) + 1) // 2
-            t = " ".join(ws[:mid]) + "\\N" + " ".join(ws[mid:])
         lines.append(f"Dialogue: 0,{ft(c.start)},{ft(c.end)},MR,,0,0,0,,{t}")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
