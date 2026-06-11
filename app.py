@@ -24,6 +24,7 @@ _gcu.get_type = _safe_get_type
 
 import gradio as gr
 import os
+import re
 import tempfile
 import shutil
 import traceback
@@ -207,14 +208,15 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
 
         a.transcript = transcript_file
 
-        stem   = Path(video_path).stem
+        # Nome do arquivo baseado no nome do aluno
+        nome_slug = re.sub(r'[^\w\s-]', '', a.nome).strip().replace(' ', '_')
         suffix = f"_{a.duracao}s" if a.duracao > 0 else ""
 
         # Usa arquivo temporário gerenciado pelo sistema (Gradio serve /tmp)
         out_tmp = tempfile.NamedTemporaryFile(
             delete=False, suffix=".mp4",
             dir="/tmp",
-            prefix=f"{stem}_medreview{suffix}_"
+            prefix=f"depoimento_{nome_slug}{suffix}_"
         )
         out_tmp.close()
         a.output = out_tmp.name

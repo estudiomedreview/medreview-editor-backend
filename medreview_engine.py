@@ -77,7 +77,7 @@ ASS_OUTLINE = "&H00000000"  # contorno preto
 ASS_SHADOW  = "&H64000000"  # sombra translúcida
 
 SUB_FONT = "DejaVu Sans"    # fonte garantida no Linux; ASS usa fontconfig
-SUB_MARGIN_B_VERTICAL = 200
+SUB_MARGIN_B_VERTICAL = 420    # posiciona legenda na caixa do peito (~60-75% da altura)
 SUB_MARGIN_B_HORIZONTAL = 230  # acima do CTA (~y0.945), abaixo do vídeo
 
 DURACOES_VALIDAS = {0, 30, 60, 90}
