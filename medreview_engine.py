@@ -455,6 +455,62 @@ def write_ass(chunks, path, w=OUT_W, h=OUT_H, white=False):
     return path
 
 
+# Cor da caixa pop-in por vertical (ASS &HAABBGGRR)
+POPIN_BOX_COLORS = {
+    "medreview": "&H00C858A8",  # roxo lavanda #A858C8 (R168 G88 B200)
+    "oft":       "&H006BADDB",  # dourado #DBAD6B
+    "anest":     "&H00F1B600",  # azul #00B6F1
+    "ortop":     "&H003399CC",  # dourado #CC9933
+}
+
+def write_ass_popin(chunks, path, w=OUT_W, h=OUT_H, vertical="medreview"):
+    """Legendas estilo POP-IN: caixa colorida arredondada, texto branco
+    uppercase Ubuntu-Bold, animação de escala (pop) na entrada.
+    Baseado no padrão PADRÃO_LEGENDAS_MED_2026."""
+    fs = int(h * 0.030)
+    box_color = POPIN_BOX_COLORS.get(vertical, POPIN_BOX_COLORS["medreview"])
+    margin_b = SUB_MARGIN_B_VERTICAL
+
+    def ft(s):
+        s = max(0.0, s)
+        hr = int(s // 3600); mn = int((s % 3600) // 60)
+        sec = int(s % 60); cs = int(round((s - int(s)) * 100))
+        if cs == 100: cs = 99
+        return f"{hr}:{mn:02d}:{sec:02d}.{cs:02d}"
+
+    # BorderStyle=4 → caixa opaca (BackColour = cor da caixa). Outline = padding.
+    header = (
+        "[Script Info]\n"
+        "Title: MED-Review POP-IN\n"
+        "ScriptType: v4.00+\n"
+        f"PlayResX: {w}\n"
+        f"PlayResY: {h}\n"
+        "WrapStyle: 0\n"
+        "ScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,"
+        "BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,"
+        "BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding\n"
+        # Texto branco, caixa colorida (BackColour), BorderStyle=4 (box), outline=padding
+        f"Style: POP,Ubuntu,{fs},&H00FFFFFF,&H000000FF,{box_color},"
+        f"{box_color},-1,0,0,0,100,100,2,0,4,18,0,2,60,60,{margin_b},1\n\n"
+        "[Events]\n"
+        "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text"
+    )
+    lines = [header]
+    for c in chunks:
+        t = c.text.replace("{", "(").replace("}", ")").strip().upper()
+        # Pop-in: escala 60%→110%→100% nos primeiros 220ms (efeito bounce)
+        dur = max(0.0, c.end - c.start)
+        anim = ("{\\fscx60\\fscy60"
+                "\\t(0,120,\\fscx110\\fscy110)"
+                "\\t(120,220,\\fscx100\\fscy100)}")
+        lines.append(f"Dialogue: 0,{ft(c.start)},{ft(c.end)},POP,,0,0,0,,{anim}{t}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return path
+
+
 # ═══ 4. OVERLAYS ════════════════════════════════════════════════════════════
 
 def load_logo_fitted(logo_path, max_w, max_h):
@@ -995,7 +1051,12 @@ def process(args):
         chunks = make_chunks(sel) if args.legendas else []
         ass = os.path.join(tmp, "s.ass")
         if chunks:
-            write_ass(chunks, ass, OUT_W, OUT_H, white=horiz)
+            estilo = getattr(args, "legenda_estilo", "dinamica")
+            if estilo == "popin":
+                write_ass_popin(chunks, ass, OUT_W, OUT_H,
+                                vertical=getattr(args, "vertical", "medreview"))
+            else:
+                write_ass(chunks, ass, OUT_W, OUT_H, white=horiz)
         ass_esc = escape_ass_path(ass)
 
         # ── Montagem do filtro de vídeo ──
