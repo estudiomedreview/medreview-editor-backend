@@ -111,7 +111,7 @@ def step1_transcrever(video_file, nome, name_sub, tema, duracao, legendas):
 
 
 # ── ETAPA 2: Renderização ───────────────────────────────────
-def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica, vertical, estilo_legenda, transcript_text):
+def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica, volume, vertical, estilo_legenda, transcript_text):
     """Renderiza o vídeo com o transcript editado pelo usuário."""
     if not video_file:
         return None, "❌ Selecione um vídeo."
@@ -161,7 +161,10 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
         a.musica = random.choice(tracks) if tracks else None
     else:
         a.musica = None
-    a.volume        = 85
+    try:
+        a.volume = max(0, min(40, int(float(volume or 12))))
+    except (ValueError, TypeError):
+        a.volume = 12
     a.frame_top     = None
     a.frame_bottom  = "Você é o próximo"
     a.frame_words   = ""
@@ -257,6 +260,7 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
             leg_input    = gr.Radio(["Sim","Não"], value="Sim", label="Gerar legendas")
             estilo_input = gr.Radio(["Dinâmica","Pop-in"], value="Dinâmica", label="Estilo de legenda")
             mus_input    = gr.Radio(["Sim","Não"], value="Sim", label="Trilha musical")
+            vol_input    = gr.Slider(0, 40, value=12, step=1, label="Volume da trilha (%)")
 
             btn_transcribe = gr.Button("🎙️ Etapa 1 — Transcrever", variant="secondary")
             btn_render     = gr.Button("🚀 Etapa 2 — Renderizar", variant="primary")
@@ -279,7 +283,7 @@ with gr.Blocks(title="MED-Review Video Editor") as demo:
 
     btn_render.click(
         fn=step2_renderizar,
-        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, mus_input, vert_input, estilo_input, transcript_box],
+        inputs=[video_input, nome_input, sub_input, tema_input, dur_input, leg_input, mus_input, vol_input, vert_input, estilo_input, transcript_box],
         outputs=[video_out, status_box],
         api_name="renderizar",
     )
