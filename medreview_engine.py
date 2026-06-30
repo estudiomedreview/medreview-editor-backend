@@ -540,10 +540,10 @@ def create_logo_overlay(w, h, logo_path, output):
     img.save(output, "PNG")
     return output
 
-def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
-    """Posição do banner de nome: sempre alinhado à esquerda, topo do vídeo.
+def find_empty_region(video_path, total_dur, w, h, nome, name_sub, posicao="top"):
+    """Posição do banner de nome: sempre alinhado à esquerda, topo OU base do vídeo.
     Retorna (x, y, max_block_w, text_h) — anchor top-left do bloco de texto.
-    (Versão simplificada: o banner do MED-Review fica fixo no topo-esquerda,
+    (Versão simplificada: o banner do MED-Review fica fixo na esquerda,
     então não é mais necessário analisar frames pra achar região vazia.)"""
     fs = int(h * 0.030)
     fs_sub = int(h * 0.016)
@@ -552,7 +552,11 @@ def find_empty_region(video_path, total_dur, w, h, nome, name_sub):
     sub_w_est = int(len(name_sub) * fs_sub * 0.62)
     max_block_w = max(text_w, sub_w_est) + int(w * 0.04)
     x = int(w * 0.04)
-    y = int(h * 0.05)
+    if posicao == "bottom":
+        # Acima da margem da legenda (que fica em SUB_MARGIN_B_VERTICAL do fundo)
+        y = int(h * 0.95) - text_h
+    else:
+        y = int(h * 0.05)
     return (x, y, max_block_w, text_h)
 
 
@@ -1004,11 +1008,19 @@ def process(args):
             print("📱 Modo VERTICAL → overlays diretos")
             logo_png = os.path.join(tmp, "logo.png")
             create_logo_overlay(OUT_W, OUT_H, args.logo, logo_png)
-            banner_png = os.path.join(tmp, "banner.png")
-            banner_pos = find_empty_region(working, eff_dur, OUT_W, OUT_H, args.nome, args.name_sub)
-            print(f"   📍 Posição do nome: x={banner_pos[0]}, y={banner_pos[1]}")
-            create_name_banner(OUT_W, OUT_H, args.nome, args.name_sub, banner_png, banner_pos,
-                                vertical=getattr(args, "vertical", "medreview"))
+            mostrar_titulo = getattr(args, "mostrar_titulo", True)
+            if mostrar_titulo:
+                banner_png = os.path.join(tmp, "banner.png")
+                titulo_posicao = getattr(args, "titulo_posicao", "top")
+                banner_pos = find_empty_region(working, eff_dur, OUT_W, OUT_H, args.nome, args.name_sub,
+                                                posicao=titulo_posicao)
+                print(f"   📍 Posição do nome ({titulo_posicao}): x={banner_pos[0]}, y={banner_pos[1]}")
+                create_name_banner(OUT_W, OUT_H, args.nome, args.name_sub, banner_png, banner_pos,
+                                    vertical=getattr(args, "vertical", "medreview"))
+            else:
+                print("   🚫 Título desativado")
+                banner_png = os.path.join(tmp, "banner_empty.png")
+                Image.new("RGBA", (OUT_W, OUT_H), (0, 0, 0, 0)).save(banner_png, "PNG")
             # garante 9:16: escala+pad o vídeo de entrada
             base_v = (
                 f"[0:v]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
