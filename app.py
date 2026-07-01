@@ -28,6 +28,9 @@ import re
 import tempfile
 import shutil
 import traceback
+
+# Garante que o diretório de cache do Gradio existe após restart do Space
+os.makedirs("/tmp/gradio", exist_ok=True)
 import json
 from pathlib import Path
 
