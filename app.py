@@ -192,13 +192,33 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
                     cached_segs = []
 
             # Mapeia o texto editado de volta pros segmentos (mantém timestamps)
+            # Mapeia texto editado preservando timestamps do Whisper.
+            # Redistribui as palavras do texto editado nos slots de tempo originais.
+            def remap_words(orig_words, new_text):
+                edited = new_text.split()
+                if not edited or not orig_words:
+                    return []
+                n_orig, n_edit = len(orig_words), len(edited)
+                if n_edit >= n_orig:
+                    return [{"word": edited[i], "start": orig_words[i]["start"],
+                             "end": orig_words[i]["end"]} for i in range(min(n_orig, n_edit))]
+                else:
+                    result = []
+                    slots_per = n_orig / n_edit
+                    for i, word in enumerate(edited):
+                        s = int(i * slots_per)
+                        e = min(int((i + 1) * slots_per), n_orig) - 1
+                        result.append({"word": word,
+                                       "start": orig_words[s]["start"],
+                                       "end": orig_words[e]["end"]})
+                    return result
+
             edited_lines = [l.strip() for l in transcript_text.strip().split("\n") if l.strip()]
             if cached_segs and len(cached_segs) == len(edited_lines):
-                # Mesmo número de linhas: preserva timestamps, usa texto editado
-                # IMPORTANTE: limpa os words pra make_chunks usar o text editado
+                # Mesmo número de linhas: preserva timestamps, remapeia texto editado
                 for seg, new_text in zip(cached_segs, edited_lines):
                     seg["text"] = new_text
-                    seg["words"] = []  # força uso do text em vez dos words originais
+                    seg["words"] = remap_words(seg.get("words", []), new_text)
                 segs_data = cached_segs
             else:
                 # Linha count mudou: distribui uniformemente
