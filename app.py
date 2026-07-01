@@ -194,9 +194,11 @@ def step2_renderizar(video_file, nome, name_sub, tema, duracao, legendas, musica
             # Mapeia o texto editado de volta pros segmentos (mantém timestamps)
             edited_lines = [l.strip() for l in transcript_text.strip().split("\n") if l.strip()]
             if cached_segs and len(cached_segs) == len(edited_lines):
-                # Mesmo número de linhas: preserva timestamps originais
+                # Mesmo número de linhas: preserva timestamps, usa texto editado
+                # IMPORTANTE: limpa os words pra make_chunks usar o text editado
                 for seg, new_text in zip(cached_segs, edited_lines):
                     seg["text"] = new_text
+                    seg["words"] = []  # força uso do text em vez dos words originais
                 segs_data = cached_segs
             else:
                 # Linha count mudou: distribui uniformemente
