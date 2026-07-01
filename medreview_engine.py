@@ -390,9 +390,16 @@ def remap_to_cut_timeline(segs, groups):
 # ═══ 3. ASS SUBTITLES ═══════════════════════════════════════════════════════
 
 def make_chunks(segs, max_w=4, max_c=15):
-    """Gera chunks de legenda respeitando máx de caracteres e palavras.
-    Verifica ANTES de adicionar a palavra pra nunca estourar max_c
-    (garante que cada chunk caiba numa linha só)."""
+    """Gera chunks de legenda respeitando pontuacao e limite de caracteres.
+    Regras:
+    - Nunca mistura fim de frase com inicio da proxima no mesmo chunk
+    - Quebra obrigatoria apos '.', '!', '?'
+    - Quebra suave apos ',' e ';' quando chunk ja tem tamanho razoavel
+    - Respeita max_c como limite maximo por chunk
+    """
+    HARD_BREAK = {'.', '!', '?'}
+    SOFT_BREAK = {',', ';', ':'}
+
     all_w = []
     for s in segs:
         if s.words:
@@ -406,20 +413,31 @@ def make_chunks(segs, max_w=4, max_c=15):
                                   round(s.start + (j + 1) * pw, 2)))
     if not all_w:
         return []
+
     chunks, cur, st, last_end = [], [], all_w[0].start, all_w[0].end
     for w in all_w:
         word = w.text.strip()
         if not word:
             continue
         tentative = (" ".join(cur + [word])).strip()
-        # Se adicionar a palavra estoura o limite E já tem conteúdo, fecha o chunk antes
-        if cur and (len(tentative) > max_c or len(cur) >= max_w):
+        ends_hard = word.rstrip()[-1] in HARD_BREAK if word.rstrip() else False
+        ends_soft = word.rstrip()[-1] in SOFT_BREAK if word.rstrip() else False
+
+        if cur and len(tentative) > max_c:
             chunks.append(SubChunk(" ".join(cur), st, last_end))
             cur, st = [], w.start
         if not cur:
             st = w.start
         cur.append(word)
         last_end = w.end
+
+        if ends_hard and cur:
+            chunks.append(SubChunk(" ".join(cur), st, last_end))
+            cur = []
+        elif ends_soft and len(" ".join(cur)) >= 8 and cur:
+            chunks.append(SubChunk(" ".join(cur), st, last_end))
+            cur = []
+
     if cur:
         chunks.append(SubChunk(" ".join(cur), st, last_end))
     return chunks
