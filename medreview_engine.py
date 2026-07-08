@@ -942,6 +942,50 @@ def process(args):
         sys.exit("❌  Não foi possível determinar a duração do vídeo.")
 
     with tempfile.TemporaryDirectory(prefix="mr_") as tmp:
+        # ── Pre-trim (dead air removal) ──────────────────────────────────────
+        trim_start = float(getattr(args, "trim_start", 0) or 0)
+        trim_end   = float(getattr(args, "trim_end",   0) or 0)
+        # Normaliza: trim_end=0 significa "usar até o fim"
+        if trim_end <= 0 or trim_end > dur:
+            trim_end = dur
+        if trim_start < 0:
+            trim_start = 0
+        if trim_end <= trim_start:
+            trim_end = dur  # inválido → ignora
+        needs_pretrim = trim_start > 0.05 or trim_end < dur - 0.05
+        if needs_pretrim:
+            pretrim_path = os.path.join(tmp, "pretrim.mp4")
+            r = run([
+                "ffmpeg", "-y",
+                "-ss", f"{trim_start:.3f}",
+                "-to", f"{trim_end:.3f}",
+                "-i", args.input,
+                "-c", "copy",
+                pretrim_path
+            ])
+            if r.returncode != 0 or not os.path.exists(pretrim_path):
+                # fallback: re-encode se copy falhar (keyframe issue)
+                r2 = run([
+                    "ffmpeg", "-y",
+                    "-ss", f"{trim_start:.3f}",
+                    "-to", f"{trim_end:.3f}",
+                    "-i", args.input,
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k",
+                    pretrim_path
+                ])
+                if r2.returncode != 0:
+                    print(f"⚠️  Pre-trim falhou — usando vídeo original.\n{r2.stderr[-300:]}")
+                    pretrim_path = args.input
+            if pretrim_path != args.input:
+                print(f"✂️  Pre-trim aplicado: {trim_start:.2f}s → {trim_end:.2f}s "
+                      f"(duração: {trim_end - trim_start:.1f}s)")
+                args.input = pretrim_path
+                # Atualiza dur e info para o vídeo trimado
+                info = probe(args.input)
+                dur  = get_dur(info)
+                src_audio = has_audio(info)
+
         # ── Transcrição ──
         # Só transcreve se precisar: legendas ON, ou corte inteligente (precisa dos segmentos)
         precisa_transcrever = args.legendas or (args.duracao > 0)
